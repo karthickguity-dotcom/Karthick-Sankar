@@ -1,0 +1,6 @@
+{
+  "name": "DMM Chord&Lyrics",
+  "description": "Professional ChordPro lyrics & chord display app with instant transposing, auto-scroll, text-to-ChordPro conversion, and multilingual support for musicians.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
