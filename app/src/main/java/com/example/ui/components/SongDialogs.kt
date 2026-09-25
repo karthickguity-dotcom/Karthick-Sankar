@@ -1,6 +1,8 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -151,6 +153,11 @@ fun PasteChordProDialog(
     onDismiss: () -> Unit
 ) {
     var title by remember { mutableStateOf("") }
+    var artist by remember { mutableStateOf("") }
+    var album by remember { mutableStateOf("") }
+    var key by remember { mutableStateOf("") }
+    var copyright by remember { mutableStateOf("") }
+    var showSongInfo by remember { mutableStateOf(false) }
     var rawText by remember { mutableStateOf("") }
 
     AlertDialog(
@@ -162,7 +169,11 @@ fun PasteChordProDialog(
             )
         },
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -170,7 +181,60 @@ fun PasteChordProDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Toggle Song Info Fields
+                TextButton(
+                    onClick = { showSongInfo = !showSongInfo },
+                    modifier = Modifier.align(androidx.compose.ui.Alignment.End)
+                ) {
+                    Text(
+                        text = if (showSongInfo) "▲ Hide Song Info" else "▼ Add Song Info (Artist, Album, Key, Copyright)",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                if (showSongInfo) {
+                    OutlinedTextField(
+                        value = artist,
+                        onValueChange = { artist = it },
+                        label = { Text("Artist / Composer") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedTextField(
+                        value = album,
+                        onValueChange = { album = it },
+                        label = { Text("Album") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedTextField(
+                        value = key,
+                        onValueChange = { key = it },
+                        label = { Text("Key (e.g. G, C, Am)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedTextField(
+                        value = copyright,
+                        onValueChange = { copyright = it },
+                        label = { Text("Copyright (e.g. © 2024 Author)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
                 OutlinedTextField(
                     value = rawText,
                     onValueChange = { rawText = it },
@@ -188,9 +252,22 @@ fun PasteChordProDialog(
             Button(
                 onClick = {
                     if (rawText.isNotBlank()) {
+                        val baseTitle = title.ifBlank { "Pasted Song" }
+                        val parsed = com.example.util.chordpro.ChordProMetadataUtils.extractSongInfo(rawText, baseTitle)
+                        val merged = com.example.util.chordpro.SongInfoData(
+                            title = title.ifBlank { parsed.title },
+                            artist = if (artist.isNotBlank()) artist else parsed.artist,
+                            album = if (album.isNotBlank()) album else parsed.album,
+                            key = if (key.isNotBlank()) key else parsed.key,
+                            copyright = if (copyright.isNotBlank()) copyright else parsed.copyright,
+                            tempo = parsed.tempo,
+                            timeSignature = parsed.timeSignature,
+                            capo = parsed.capo
+                        )
+                        val formattedChordPro = com.example.util.chordpro.ChordProMetadataUtils.applySongInfo(rawText.trim(), merged)
                         onImportText(
-                            rawText.trim(),
-                            title.ifBlank { "Pasted Song" }
+                            formattedChordPro,
+                            merged.title
                         )
                     }
                 },

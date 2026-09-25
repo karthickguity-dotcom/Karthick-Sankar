@@ -37,7 +37,9 @@ data class SongSection(
 data class ParsedSong(
     val title: String,
     val artist: String = "",
+    val album: String = "",
     val key: String = "",
+    val copyright: String = "",
     val capo: Int = 0,
     val tempo: String = "",
     val timeSignature: String = "",

@@ -70,7 +70,7 @@ fun PdfExportDialog(
     var selectedPageSize by remember { mutableStateOf(PdfPageSize.A4) }
     var selectedFontSize by remember { mutableStateOf(PdfFontSizeMode.STANDARD) }
     var selectedChordColorIndex by remember { mutableStateOf(0) }
-    var selectedChordDiagramInstrument by remember { mutableStateOf(InstrumentType.GUITAR) }
+    var selectedChordDiagramInstrument by remember { mutableStateOf(InstrumentType.BOTH) }
     var includeMetadata by remember { mutableStateOf(true) }
     var includeFooter by remember { mutableStateOf(true) }
 
@@ -304,36 +304,64 @@ fun PdfExportDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Chord Diagrams Selection (Relative to Song Sheet)
+                // Chord Diagrams Selection (In the Side of the Page)
                 Text(
-                    text = "Chord Diagrams (Song Sheet Header)",
+                    text = "Side Page Chord Diagrams",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    listOf(
-                        Pair(InstrumentType.GUITAR, "🎸 Guitar"),
-                        Pair(InstrumentType.PIANO, "🎹 Piano"),
-                        Pair(InstrumentType.NONE, "✕ None")
-                    ).forEach { (inst, label) ->
-                        val isSelected = selectedChordDiagramInstrument == inst
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { selectedChordDiagramInstrument = inst },
-                            label = { Text(label, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("pdf_diagram_${inst.name.lowercase()}")
-                        )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        listOf(
+                            Pair(InstrumentType.PIANO, "🎹 Piano (Side)"),
+                            Pair(InstrumentType.GUITAR, "🎸 Guitar (Side)")
+                        ).forEach { (inst, label) ->
+                            val isSelected = selectedChordDiagramInstrument == inst
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedChordDiagramInstrument = inst },
+                                label = { Text(label, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("pdf_diagram_${inst.name.lowercase()}")
+                            )
+                        }
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        listOf(
+                            Pair(InstrumentType.BOTH, "🎹+🎸 Both (Side)"),
+                            Pair(InstrumentType.NONE, "✕ None")
+                        ).forEach { (inst, label) ->
+                            val isSelected = selectedChordDiagramInstrument == inst
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedChordDiagramInstrument = inst },
+                                label = { Text(label, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("pdf_diagram_${inst.name.lowercase()}")
+                            )
+                        }
                     }
                 }
 

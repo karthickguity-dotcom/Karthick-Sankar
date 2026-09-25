@@ -18,12 +18,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.AppDatabase
+import com.example.data.parser.AccidentalMode
 import com.example.data.preferences.AppSettingsManager
 import com.example.data.repository.SongRepository
 import com.example.ui.screens.ConverterScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LyricsScreen
 import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.TunerScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.LyricsViewModel
 import com.example.ui.viewmodel.SongLibraryViewModel
@@ -33,6 +35,7 @@ sealed interface AppScreen {
     data class Lyrics(val songId: Long) : AppScreen
     data object Settings : AppScreen
     data object Converter : AppScreen
+    data class Tuner(val returnScreen: AppScreen = AppScreen.Home) : AppScreen
 }
 
 class MainActivity : ComponentActivity() {
@@ -62,7 +65,10 @@ class MainActivity : ComponentActivity() {
 
                 // Handle hardware or system gesture Back button
                 BackHandler(enabled = currentScreen !is AppScreen.Home) {
-                    currentScreen = AppScreen.Home
+                    currentScreen = when (val s = currentScreen) {
+                        is AppScreen.Tuner -> s.returnScreen
+                        else -> AppScreen.Home
+                    }
                 }
 
                 Surface(
@@ -86,6 +92,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onNavigateConverter = {
                                     currentScreen = AppScreen.Converter
+                                },
+                                onNavigateTuner = {
+                                    currentScreen = AppScreen.Tuner(returnScreen = AppScreen.Home)
                                 }
                             )
                         }
@@ -106,6 +115,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onNavigateSettings = {
                                     currentScreen = AppScreen.Settings
+                                },
+                                onNavigateTuner = {
+                                    currentScreen = AppScreen.Tuner(returnScreen = AppScreen.Lyrics(screen.songId))
                                 }
                             )
                         }
@@ -133,6 +145,15 @@ class MainActivity : ComponentActivity() {
                                     songViewModel.importFromText(chordProText, title) {
                                         currentScreen = AppScreen.Home
                                     }
+                                }
+                            )
+                        }
+                        is AppScreen.Tuner -> {
+                            TunerScreen(
+                                langCode = settings.appLanguage,
+                                accidentalMode = AccidentalMode.fromString(settings.accidentalMode),
+                                onBack = {
+                                    currentScreen = screen.returnScreen
                                 }
                             )
                         }

@@ -125,8 +125,35 @@ object PdfSongExporter {
     ): Int {
         val pageWidth = options.pageSize.width
         val pageHeight = options.pageSize.height
-        val contentWidth = pageWidth - MARGIN_LEFT - MARGIN_RIGHT
         val contentBottom = pageHeight - MARGIN_BOTTOM
+
+        // Collect unique transposed chords in the song
+        val uniqueChords = mutableListOf<String>()
+        for (sec in parsedSong.sections) {
+            for (line in sec.lines) {
+                for (pair in line.pairs) {
+                    pair.chord?.takeIf { it.isNotBlank() }?.let { raw ->
+                        val transposed = Transposer.transposeChord(raw, transposeSemitones, accidentalMode)
+                        if (!uniqueChords.contains(transposed)) {
+                            uniqueChords.add(transposed)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Side chords layout configuration (in the side of the page)
+        val hasSideChords = options.chordDiagramInstrument != InstrumentType.NONE && uniqueChords.isNotEmpty()
+        val sidebarWidth = when (options.chordDiagramInstrument) {
+            InstrumentType.PIANO -> 70f
+            InstrumentType.GUITAR -> 54f
+            InstrumentType.BOTH -> 72f
+            InstrumentType.NONE -> 0f
+        }
+        val gutter = if (hasSideChords) 14f else 0f
+        val effectiveRightMargin = MARGIN_RIGHT + (if (hasSideChords) sidebarWidth + gutter else 0f)
+        val sidebarStartX = pageWidth - MARGIN_RIGHT - sidebarWidth
+        val contentWidth = pageWidth - MARGIN_LEFT - effectiveRightMargin
 
         // Paints
         val titlePaint = TextPaint().apply {
@@ -216,8 +243,92 @@ object PdfSongExporter {
             return currentCanvas
         }
 
+        // Draw Side Chords in the side column of the page
+        fun drawSideChords(canvas: Canvas?) {
+            if (canvas == null || !hasSideChords) return
+
+            // Vertical divider between lyrics and side chords
+            val dividerX = sidebarStartX - (gutter / 2f)
+            canvas.drawLine(dividerX, MARGIN_TOP, dividerX, pageHeight - MARGIN_BOTTOM, dividerPaint)
+
+            // Header badge for side chords
+            var sideY = MARGIN_TOP
+            val headerTitle = when (options.chordDiagramInstrument) {
+                InstrumentType.PIANO -> "PIANO"
+                InstrumentType.GUITAR -> "GUITAR"
+                InstrumentType.BOTH -> "CHORDS"
+                InstrumentType.NONE -> ""
+            }
+
+            val badgeHeight = 15f
+            canvas.drawRoundRect(
+                sidebarStartX,
+                sideY,
+                sidebarStartX + sidebarWidth,
+                sideY + badgeHeight,
+                4f,
+                4f,
+                metaBadgeBgPaint
+            )
+            val sideHeaderPaint = TextPaint().apply {
+                color = Color.parseColor("#475569")
+                textSize = 7.5f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                textAlign = Paint.Align.CENTER
+                isAntiAlias = true
+            }
+            canvas.drawText(headerTitle, sidebarStartX + sidebarWidth / 2f, sideY + 10.5f, sideHeaderPaint)
+            sideY += badgeHeight + 8f
+
+            val isPiano = options.chordDiagramInstrument == InstrumentType.PIANO
+            val isGuitar = options.chordDiagramInstrument == InstrumentType.GUITAR
+            val isBoth = options.chordDiagramInstrument == InstrumentType.BOTH
+
+            for (chord in uniqueChords) {
+                val neededHeight = when {
+                    isBoth -> 82f
+                    isGuitar -> 56f
+                    isPiano -> 40f
+                    else -> 0f
+                }
+                if (sideY + neededHeight > pageHeight - MARGIN_BOTTOM - 6f) {
+                    break // fits neatly down the side
+                }
+
+                if (isPiano) {
+                    val pW = sidebarWidth.coerceAtMost(66f)
+                    val pH = 34f
+                    val px = sidebarStartX + (sidebarWidth - pW) / 2f
+                    drawPianoDiagramPdf(canvas, px, sideY, chord, pW, pH, options.chordColor, accidentalMode)
+                    sideY += pH + 10f
+                } else if (isGuitar) {
+                    val gW = 46f
+                    val gH = 50f
+                    val gx = sidebarStartX + (sidebarWidth - gW) / 2f
+                    drawGuitarDiagramPdf(canvas, gx, sideY, chord, gW, gH, options.chordColor)
+                    sideY += gH + 10f
+                } else if (isBoth) {
+                    // Both Guitar and Piano in the side of the page (Piano first, then Guitar)
+                    val pW = sidebarWidth.coerceAtMost(66f)
+                    val pH = 30f
+                    val px = sidebarStartX + (sidebarWidth - pW) / 2f
+                    drawPianoDiagramPdf(canvas, px, sideY, chord, pW, pH, options.chordColor, accidentalMode)
+                    sideY += pH + 4f
+
+                    val gW = 44f
+                    val gH = 44f
+                    val gx = sidebarStartX + (sidebarWidth - gW) / 2f
+                    drawGuitarDiagramPdf(canvas, gx, sideY, chord, gW, gH, options.chordColor)
+                    sideY += gH + 8f
+                }
+            }
+        }
+
         fun finishCurrentPage() {
             if (doc != null && currentPage != null && currentCanvas != null) {
+                // Draw side chords on the page
+                drawSideChords(currentCanvas)
+
                 // Draw footer before finishing
                 if (options.includeFooter) {
                     val footerY = pageHeight - MARGIN_BOTTOM + 22f
@@ -289,7 +400,7 @@ object PdfSongExporter {
                 val textWidth = metaBadgeTextPaint.measureText(badge)
                 val badgeWidth = textWidth + (badgePadding * 2)
 
-                if (badgeX + badgeWidth > pageWidth - MARGIN_RIGHT) {
+                if (badgeX + badgeWidth > pageWidth - effectiveRightMargin) {
                     badgeX = MARGIN_LEFT
                     currentY += badgeHeight + 4f
                 }
@@ -316,57 +427,11 @@ object PdfSongExporter {
             currentY += badgeHeight + 12f
 
             // Header horizontal divider
-            currentCanvas?.drawLine(MARGIN_LEFT, currentY, pageWidth - MARGIN_RIGHT, currentY, dividerPaint)
+            currentCanvas?.drawLine(MARGIN_LEFT, currentY, pageWidth - effectiveRightMargin, currentY, dividerPaint)
             currentY += 14f
         }
 
         drawHeader()
-
-        // Draw Chord Diagrams on Page 1 if requested
-        fun drawChordDiagrams() {
-            if (options.chordDiagramInstrument == InstrumentType.NONE) return
-            val uniqueChords = mutableListOf<String>()
-            for (sec in parsedSong.sections) {
-                for (line in sec.lines) {
-                    for (pair in line.pairs) {
-                        pair.chord?.takeIf { it.isNotBlank() }?.let { raw ->
-                            val transposed = Transposer.transposeChord(raw, transposeSemitones, accidentalMode)
-                            if (!uniqueChords.contains(transposed)) {
-                                uniqueChords.add(transposed)
-                            }
-                        }
-                    }
-                }
-            }
-            if (uniqueChords.isEmpty()) return
-
-            val isGuitar = options.chordDiagramInstrument == InstrumentType.GUITAR
-            val diagW = if (isGuitar) 44f else 64f
-            val diagH = if (isGuitar) 54f else 38f
-            val spacing = 12f
-
-            var currentX = MARGIN_LEFT
-            for (chord in uniqueChords) {
-                if (currentX + diagW > pageWidth - MARGIN_RIGHT) {
-                    currentX = MARGIN_LEFT
-                    currentY += diagH + 8f
-                }
-                currentCanvas?.let { cv ->
-                    if (isGuitar) {
-                        drawGuitarDiagramPdf(cv, currentX, currentY, chord, diagW, diagH, options.chordColor)
-                    } else {
-                        drawPianoDiagramPdf(cv, currentX, currentY, chord, diagW, diagH, options.chordColor, accidentalMode)
-                    }
-                }
-                currentX += diagW + spacing
-            }
-
-            currentY += diagH + 10f
-            currentCanvas?.drawLine(MARGIN_LEFT, currentY, pageWidth - MARGIN_RIGHT, currentY, dividerPaint)
-            currentY += 12f
-        }
-
-        drawChordDiagrams()
 
         val chordH = options.fontSizeMode.chordSize
         val lyricH = options.fontSizeMode.lyricSize
@@ -474,7 +539,7 @@ object PdfSongExporter {
                             val pairW = maxOf(chordW, lyricW)
 
                             // Wrap to next line if exceeds right margin
-                            if (x + pairW > pageWidth - MARGIN_RIGHT && x > MARGIN_LEFT) {
+                            if (x + pairW > pageWidth - effectiveRightMargin && x > MARGIN_LEFT) {
                                 currentY += rowHeight
                                 if (currentY + rowHeight > contentBottom) {
                                     finishCurrentPage()

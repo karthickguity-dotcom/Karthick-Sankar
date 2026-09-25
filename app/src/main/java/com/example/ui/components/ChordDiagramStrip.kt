@@ -89,20 +89,6 @@ fun ChordDiagramStrip(
                 )
 
                 FilterChip(
-                    selected = selectedInstrument == InstrumentType.GUITAR,
-                    onClick = {
-                        val next = if (selectedInstrument == InstrumentType.GUITAR) InstrumentType.NONE else InstrumentType.GUITAR
-                        onInstrumentChanged(next)
-                    },
-                    label = { Text("🎸 Guitar", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
-                    modifier = Modifier.testTag("instrument_chip_guitar"),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                )
-
-                FilterChip(
                     selected = selectedInstrument == InstrumentType.PIANO,
                     onClick = {
                         val next = if (selectedInstrument == InstrumentType.PIANO) InstrumentType.NONE else InstrumentType.PIANO
@@ -110,6 +96,20 @@ fun ChordDiagramStrip(
                     },
                     label = { Text("🎹 Piano", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
                     modifier = Modifier.testTag("instrument_chip_piano"),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+
+                FilterChip(
+                    selected = selectedInstrument == InstrumentType.GUITAR,
+                    onClick = {
+                        val next = if (selectedInstrument == InstrumentType.GUITAR) InstrumentType.NONE else InstrumentType.GUITAR
+                        onInstrumentChanged(next)
+                    },
+                    label = { Text("🎸 Guitar", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                    modifier = Modifier.testTag("instrument_chip_guitar"),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -174,7 +174,7 @@ fun ChordDiagramStrip(
                                 onClick = { inspectedChord = chordName }
                             )
                         }
-                        InstrumentType.NONE -> {}
+                        InstrumentType.NONE, InstrumentType.BOTH -> {}
                     }
                 }
             }
@@ -185,7 +185,7 @@ fun ChordDiagramStrip(
     inspectedChord?.let { chordName ->
         ChordDetailDialog(
             chordName = chordName,
-            initialInstrument = if (selectedInstrument == InstrumentType.NONE) InstrumentType.GUITAR else selectedInstrument,
+            initialInstrument = if (selectedInstrument == InstrumentType.NONE || selectedInstrument == InstrumentType.BOTH) InstrumentType.GUITAR else selectedInstrument,
             chordColor = chordColor,
             accidentalMode = accidentalMode,
             onDismiss = { inspectedChord = null }
@@ -202,7 +202,7 @@ fun ChordDetailDialog(
     onDismiss: () -> Unit
 ) {
     var instrument by remember {
-        mutableStateOf(if (initialInstrument == InstrumentType.NONE) InstrumentType.GUITAR else initialInstrument)
+        mutableStateOf(if (initialInstrument == InstrumentType.NONE || initialInstrument == InstrumentType.BOTH) InstrumentType.PIANO else initialInstrument)
     }
 
     AlertDialog(
@@ -224,17 +224,17 @@ fun ChordDetailDialog(
                     fontWeight = FontWeight.Bold
                 )
 
-                // Instrument Switcher within Dialog
+                // Instrument Switcher within Dialog: Piano first, then Guitar
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    FilterChip(
-                        selected = instrument == InstrumentType.GUITAR,
-                        onClick = { instrument = InstrumentType.GUITAR },
-                        label = { Text("🎸", fontSize = 14.sp) }
-                    )
                     FilterChip(
                         selected = instrument == InstrumentType.PIANO,
                         onClick = { instrument = InstrumentType.PIANO },
                         label = { Text("🎹", fontSize = 14.sp) }
+                    )
+                    FilterChip(
+                        selected = instrument == InstrumentType.GUITAR,
+                        onClick = { instrument = InstrumentType.GUITAR },
+                        label = { Text("🎸", fontSize = 14.sp) }
                     )
                 }
             }
@@ -291,7 +291,7 @@ fun ChordDetailDialog(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    InstrumentType.NONE -> {}
+                    InstrumentType.NONE, InstrumentType.BOTH -> {}
                 }
             }
         }

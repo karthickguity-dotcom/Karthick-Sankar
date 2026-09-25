@@ -25,7 +25,9 @@ data class AppDisplaySettings(
     val keepScreenOn: Boolean = true,
     val appLanguage: String = "en",
     val accidentalMode: String = "SHARP", // "SHARP" or "FLAT"
-    val preferredInstrument: String = "GUITAR" // "GUITAR", "PIANO", "NONE"
+    val preferredInstrument: String = "NONE", // "PIANO", "GUITAR", "NONE"
+    val defaultTransliteration: String = "original",
+    val defaultShowOnlyLyrics: Boolean = false
 )
 
 class AppSettingsManager(context: Context) {
@@ -44,8 +46,20 @@ class AppSettingsManager(context: Context) {
             keepScreenOn = prefs.getBoolean("keep_screen_on", true),
             appLanguage = prefs.getString("app_language", "en") ?: "en",
             accidentalMode = prefs.getString("accidental_mode", "SHARP") ?: "SHARP",
-            preferredInstrument = prefs.getString("preferred_instrument", "GUITAR") ?: "GUITAR"
+            preferredInstrument = prefs.getString("preferred_instrument", "NONE") ?: "NONE",
+            defaultTransliteration = prefs.getString("default_transliteration", "original") ?: "original",
+            defaultShowOnlyLyrics = prefs.getBoolean("default_show_only_lyrics", false)
         )
+    }
+
+    fun updateDefaultTransliteration(targetId: String) {
+        prefs.edit().putString("default_transliteration", targetId).apply()
+        _settings.value = _settings.value.copy(defaultTransliteration = targetId)
+    }
+
+    fun updateDefaultShowOnlyLyrics(onlyLyrics: Boolean) {
+        prefs.edit().putBoolean("default_show_only_lyrics", onlyLyrics).apply()
+        _settings.value = _settings.value.copy(defaultShowOnlyLyrics = onlyLyrics)
     }
 
     fun updateAccidentalMode(mode: String) {

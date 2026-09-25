@@ -1,15 +1,17 @@
 package com.example.util.chord
 
 enum class InstrumentType(val displayName: String, val iconEmoji: String) {
-    GUITAR("Guitar", "🎸"),
     PIANO("Piano", "🎹"),
+    GUITAR("Guitar", "🎸"),
+    BOTH("Both", "🎹+🎸"),
     NONE("Hide", "✕");
 
     companion object {
         fun fromString(value: String?): InstrumentType {
             return when (value?.uppercase()) {
-                "GUITAR" -> GUITAR
                 "PIANO" -> PIANO
+                "GUITAR" -> GUITAR
+                "BOTH" -> BOTH
                 else -> NONE
             }
         }

@@ -72,10 +72,12 @@ class SongRepository(
             val entity = SongEntity(
                 title = parsed.title.ifBlank { fallbackTitle },
                 artist = parsed.artist,
+                album = parsed.album,
                 originalKey = parsed.key,
                 capo = parsed.capo,
                 tempo = parsed.tempo,
                 timeSignature = parsed.timeSignature,
+                copyright = parsed.copyright,
                 rawChordPro = content
             )
 
@@ -112,10 +114,12 @@ class SongRepository(
             val entity = SongEntity(
                 title = finalTitle,
                 artist = parsed.artist,
+                album = parsed.album,
                 originalKey = parsed.key,
                 capo = parsed.capo,
                 tempo = parsed.tempo,
                 timeSignature = parsed.timeSignature,
+                copyright = parsed.copyright,
                 rawChordPro = updatedChordPro,
                 updatedAt = System.currentTimeMillis()
             )
@@ -198,10 +202,12 @@ class SongRepository(
         return SongEntity(
             title = title,
             artist = artist,
+            album = parsed.album,
             originalKey = key,
             capo = capo,
             tempo = parsed.tempo,
             timeSignature = parsed.timeSignature,
+            copyright = parsed.copyright,
             rawChordPro = raw
         )
     }
@@ -210,10 +216,12 @@ class SongRepository(
         val AMAZING_GRACE_CHORDPRO = """
             {title: Amazing Grace}
             {artist: John Newton}
+            {album: Olney Hymns}
             {key: G}
             {capo: 2}
             {tempo: 72}
             {time: 3/4}
+            {copyright: Public Domain • Words: John Newton (1779)}
 
             {comment: Verse 1}
             [G] Amazing grace how [C]sweet the [G]sound

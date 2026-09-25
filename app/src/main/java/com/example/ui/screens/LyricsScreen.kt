@@ -29,8 +29,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -39,7 +43,10 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -81,13 +88,19 @@ import com.example.data.preferences.AppSettingsManager
 import com.example.ui.components.ChordDetailDialog
 import com.example.ui.components.ChordDiagramStrip
 import com.example.ui.components.ChordProSongView
+import com.example.ui.components.LyricsTransliterationDialog
 import com.example.ui.components.PdfExportDialog
+import com.example.ui.components.PracticeSessionPanel
+import com.example.ui.components.SongInfoDialog
 import com.example.ui.components.TempoTimeSigDialog
+import com.example.ui.components.TunerDialog
 import com.example.ui.i18n.AppStrings
 import com.example.ui.viewmodel.LyricsViewModel
 import com.example.util.chord.InstrumentType
+import com.example.util.chordpro.SongInfoData
 import com.example.util.pdf.PdfExportOptions
 import com.example.util.pdf.PdfSongExporter
+import com.example.util.transliteration.TransliterationTarget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -104,6 +117,7 @@ fun LyricsScreen(
     onNavigateSettings: () -> Unit,
     onUpdateAccidentalMode: ((String) -> Unit)? = null,
     onUpdatePreferredInstrument: ((String) -> Unit)? = null,
+    onNavigateTuner: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -117,9 +131,17 @@ fun LyricsScreen(
     val isAutoScrolling by viewModel.isAutoScrolling.collectAsStateWithLifecycle()
     val autoScrollSpeed by viewModel.autoScrollSpeed.collectAsStateWithLifecycle()
     val isFullScreen by viewModel.isFullScreen.collectAsStateWithLifecycle()
+    val showOnlyLyrics by viewModel.showOnlyLyrics.collectAsStateWithLifecycle()
+    val transliterationTarget by viewModel.transliterationTarget.collectAsStateWithLifecycle()
+    val practiceState by viewModel.practiceState.collectAsStateWithLifecycle()
 
-    var selectedInstrument by remember(settings.preferredInstrument) {
-        mutableStateOf(InstrumentType.fromString(settings.preferredInstrument))
+    var showTransliterationDialog by remember { mutableStateOf(false) }
+    var showSongInfoDialog by remember { mutableStateOf(false) }
+    var showPracticeSession by remember { mutableStateOf(false) }
+    var showTunerDialog by remember { mutableStateOf(false) }
+
+    var selectedInstrument by remember {
+        mutableStateOf(InstrumentType.NONE)
     }
     var clickedChordForDetail by remember { mutableStateOf<String?>(null) }
 
@@ -235,7 +257,14 @@ fun LyricsScreen(
         }
     }
 
-    // Smooth Auto-Scrolling Loop
+    // Stop metronome when leaving the lyrics screen
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.stopPracticeSession()
+        }
+    }
+
+    // Smooth Standard Auto-Scrolling Loop
     LaunchedEffect(isAutoScrolling, autoScrollSpeed) {
         if (isAutoScrolling) {
             while (isActive && isAutoScrolling) {
@@ -243,6 +272,28 @@ fun LyricsScreen(
                 val stepPixels = (autoScrollSpeed * 1.5f)
                 scrollState.scrollBy(stepPixels)
                 delay(40)
+            }
+        }
+    }
+
+    // Metronome-Relative Auto-Scrolling Loop for Practice Session
+    // Scrolls the lyrics and chords at a pace directly synchronized with the metronome timing (BPM & pace multiplier)
+    LaunchedEffect(
+        practiceState.isPlaying,
+        practiceState.isCountingIn,
+        practiceState.relativeScrollEnabled,
+        practiceState.bpm,
+        practiceState.scrollPaceMultiplier
+    ) {
+        if (practiceState.isPlaying && !practiceState.isCountingIn && practiceState.relativeScrollEnabled) {
+            val frameIntervalMs = 25L
+            while (isActive && practiceState.isPlaying && !practiceState.isCountingIn && practiceState.relativeScrollEnabled) {
+                val pixelsPerSec = practiceState.getScrollPixelsPerSecond()
+                val delta = pixelsPerSec * (frameIntervalMs / 1000f)
+                if (delta > 0f) {
+                    scrollState.scrollBy(delta)
+                }
+                delay(frameIntervalMs)
             }
         }
     }
@@ -308,19 +359,81 @@ fun LyricsScreen(
                                     textAlign = TextAlign.Center
                                 )
                                 val artist = currentSong?.artist ?: parsedSong?.artist ?: ""
-                                if (artist.isNotBlank()) {
+                                val album = currentSong?.album?.ifBlank { null } ?: parsedSong?.album?.ifBlank { null }
+                                val subText = when {
+                                    artist.isNotBlank() && album != null -> "$artist • $album"
+                                    artist.isNotBlank() -> artist
+                                    album != null -> album
+                                    else -> ""
+                                }
+                                if (subText.isNotBlank()) {
                                     Text(
-                                        text = artist,
+                                        text = subText,
                                         color = secondaryColor,
-                                        fontSize = 13.sp,
+                                        fontSize = 12.sp,
                                         maxLines = 1,
                                         textAlign = TextAlign.Center
                                     )
                                 }
                             }
 
-                            // Action buttons: Fullscreen toggle & Settings & PDF Export
+                            // Action buttons: Practice Metronome, Tuner, Lyrics Mode toggle, Transliteration, Song Info, PDF Export, Fullscreen, Settings
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                // Practice Session & Metronome button
+                                IconButton(
+                                    onClick = { showPracticeSession = !showPracticeSession },
+                                    modifier = Modifier.testTag("lyrics_practice_session_toggle_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.HourglassTop,
+                                        contentDescription = "Practice Session & Metronome",
+                                        tint = if (practiceState.isPlaying || showPracticeSession) chosenChordColor else textColor
+                                    )
+                                }
+                                // Instrument Tuner button
+                                IconButton(
+                                    onClick = { showTunerDialog = true },
+                                    modifier = Modifier.testTag("lyrics_tuner_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "Instrument Tuner",
+                                        tint = if (showTunerDialog) chosenChordColor else textColor
+                                    )
+                                }
+                                // Toggle Show Only Lyrics
+                                IconButton(
+                                    onClick = { viewModel.toggleShowOnlyLyrics() },
+                                    modifier = Modifier.testTag("lyrics_toggle_lyrics_only_button")
+                                ) {
+                                    Icon(
+                                        imageVector = if (showOnlyLyrics) Icons.Default.MusicNote else Icons.Default.TextFields,
+                                        contentDescription = if (showOnlyLyrics) "Show Chords & Lyrics" else "Show Only Lyrics",
+                                        tint = if (showOnlyLyrics) chosenChordColor else textColor
+                                    )
+                                }
+                                // Transliteration button
+                                IconButton(
+                                    onClick = { showTransliterationDialog = true },
+                                    modifier = Modifier.testTag("lyrics_transliteration_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Language,
+                                        contentDescription = "Transliterate Lyrics",
+                                        tint = if (transliterationTarget != TransliterationTarget.ORIGINAL) chosenChordColor else textColor
+                                    )
+                                }
+                                // Song Info button
+                                IconButton(
+                                    onClick = { showSongInfoDialog = true },
+                                    modifier = Modifier.testTag("lyrics_song_info_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = "Song Info",
+                                        tint = textColor
+                                    )
+                                }
                                 IconButton(
                                     onClick = { showPdfExportDialog = true },
                                     modifier = Modifier.testTag("lyrics_export_pdf_button")
@@ -338,6 +451,18 @@ fun LyricsScreen(
                                     Icon(
                                         imageVector = if (isFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                                         contentDescription = "Toggle Fullscreen",
+                                        tint = textColor
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        if (onNavigateTuner != null) onNavigateTuner() else showTunerDialog = true
+                                    },
+                                    modifier = Modifier.testTag("lyrics_tuner_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "Instrument Tuner",
                                         tint = textColor
                                     )
                                 }
@@ -518,6 +643,156 @@ fun LyricsScreen(
                             }
                         }
 
+                        // Sub-header Row 2: View Mode (Chords+Lyrics vs Only Lyrics) & Transliteration Chip
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                        ) {
+                            // Mode Switch Pill
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.testTag("lyrics_mode_toggle_selector")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(2.dp)
+                                ) {
+                                    Surface(
+                                        onClick = { viewModel.setShowOnlyLyrics(false) },
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = if (!showOnlyLyrics) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        modifier = Modifier.testTag("mode_chords_lyrics")
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.MusicNote,
+                                                contentDescription = null,
+                                                tint = if (!showOnlyLyrics) MaterialTheme.colorScheme.onPrimary else textColor.copy(alpha = 0.75f),
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Chords & Lyrics",
+                                                fontSize = 12.sp,
+                                                fontWeight = if (!showOnlyLyrics) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (!showOnlyLyrics) MaterialTheme.colorScheme.onPrimary else textColor.copy(alpha = 0.75f)
+                                            )
+                                        }
+                                    }
+
+                                    Surface(
+                                        onClick = { viewModel.setShowOnlyLyrics(true) },
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = if (showOnlyLyrics) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        modifier = Modifier.testTag("mode_only_lyrics")
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.TextFields,
+                                                contentDescription = null,
+                                                tint = if (showOnlyLyrics) MaterialTheme.colorScheme.onPrimary else textColor.copy(alpha = 0.75f),
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Only Lyrics",
+                                                fontSize = 12.sp,
+                                                fontWeight = if (showOnlyLyrics) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (showOnlyLyrics) MaterialTheme.colorScheme.onPrimary else textColor.copy(alpha = 0.75f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Transliteration Quick Chip
+                            Surface(
+                                onClick = { showTransliterationDialog = true },
+                                color = if (transliterationTarget != TransliterationTarget.ORIGINAL) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                border = if (transliterationTarget != TransliterationTarget.ORIGINAL) {
+                                    BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                                } else null,
+                                modifier = Modifier.testTag("lyrics_transliteration_chip")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Language,
+                                        contentDescription = "Transliterate",
+                                        tint = if (transliterationTarget != TransliterationTarget.ORIGINAL) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            textColor.copy(alpha = 0.75f)
+                                        },
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (transliterationTarget != TransliterationTarget.ORIGINAL) {
+                                            "Script: ${transliterationTarget.shortBadge}"
+                                        } else {
+                                            "Transliterate"
+                                        },
+                                        fontSize = 12.sp,
+                                        fontWeight = if (transliterationTarget != TransliterationTarget.ORIGINAL) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (transliterationTarget != TransliterationTarget.ORIGINAL) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            textColor.copy(alpha = 0.75f)
+                                        }
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Tuner Quick Chip
+                            Surface(
+                                onClick = { showTunerDialog = true },
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.testTag("lyrics_tuner_quick_chip")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "Tuner",
+                                        tint = textColor.copy(alpha = 0.75f),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Tuner",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = textColor.copy(alpha = 0.75f)
+                                    )
+                                }
+                            }
+                        }
+
                         HorizontalDivider(
                             color = textColor.copy(alpha = 0.12f),
                             thickness = 1.dp
@@ -527,7 +802,8 @@ fun LyricsScreen(
             }
 
             // Chord Diagram Strip (Guitar / Piano / Hide selector with diagram carousel)
-            if (!isFullScreen && uniqueChords.isNotEmpty()) {
+            // Hidden automatically when in "Show Only Lyrics" mode
+            if (!isFullScreen && !showOnlyLyrics && uniqueChords.isNotEmpty()) {
                 ChordDiagramStrip(
                     chords = uniqueChords,
                     selectedInstrument = selectedInstrument,
@@ -678,12 +954,56 @@ fun LyricsScreen(
                                     )
                                 }
 
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { showPracticeSession = !showPracticeSession }
+                                        .testTag("sheet_practice_indicator")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.HourglassTop,
+                                        contentDescription = "Practice Metronome",
+                                        tint = if (practiceState.isPlaying) chosenChordColor else MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (practiceState.isPlaying) "Practice (${practiceState.bpm})" else "Practice",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (practiceState.isPlaying) chosenChordColor else textColor
+                                    )
+                                }
+
                                 if (songCapo > 0) {
                                     Text(
                                         text = "Capo $songCapo",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = secondaryColor
+                                    )
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { showSongInfoDialog = true }
+                                        .testTag("sheet_song_info_indicator")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = "Song Info",
+                                        tint = chosenChordColor,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "Info",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = textColor
                                     )
                                 }
                             }
@@ -698,8 +1018,44 @@ fun LyricsScreen(
                             lineSpacing = settings.lineSpacing,
                             chordColor = chosenChordColor,
                             lyricsColor = textColor,
+                            showOnlyLyrics = showOnlyLyrics,
+                            transliterationTarget = transliterationTarget,
                             onChordClick = { chord -> clickedChordForDetail = chord }
                         )
+
+                        // Copyright Notice & Album Footer Display
+                        val copyrightText = currentSong?.copyright?.ifBlank { null } ?: parsedSong?.copyright?.ifBlank { null }
+                        val albumText = currentSong?.album?.ifBlank { null } ?: parsedSong?.album?.ifBlank { null }
+
+                        if (copyrightText != null || albumText != null) {
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp)
+                                    .testTag("lyrics_footer_song_info")
+                            ) {
+                                if (albumText != null) {
+                                    Text(
+                                        text = "Album: $albumText",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = secondaryColor.copy(alpha = 0.8f),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                                if (copyrightText != null) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = copyrightText,
+                                        fontSize = 11.sp,
+                                        color = secondaryColor.copy(alpha = 0.65f),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
 
                         // Bottom padding so fixed controls don't obscure last lyrics
                         Spacer(modifier = Modifier.height(180.dp))
@@ -722,6 +1078,48 @@ fun LyricsScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
+                    // Practice Session Metronome & Relative Scroll Control Panel
+                    AnimatedVisibility(
+                        visible = showPracticeSession,
+                        enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+                        exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut()
+                    ) {
+                        PracticeSessionPanel(
+                            state = practiceState,
+                            chordColor = chosenChordColor,
+                            onTogglePlay = { viewModel.togglePracticeSession() },
+                            onResetSession = {
+                                viewModel.resetPracticeSession()
+                                coroutineScope.launch { scrollState.animateScrollTo(0) }
+                            },
+                            onAdjustBpm = { delta -> viewModel.adjustPracticeBpm(delta) },
+                            onSetBpm = { bpm -> viewModel.setPracticeBpm(bpm) },
+                            onTapTempo = { viewModel.registerPracticeTap() },
+                            onSetTimeSignature = { timeSig -> viewModel.setPracticeTimeSignature(timeSig) },
+                            onToggleMute = { viewModel.togglePracticeMute() },
+                            onToggleRelativeScroll = { viewModel.togglePracticeRelativeScroll() },
+                            onSetScrollPace = { pace -> viewModel.setPracticeScrollPace(pace) },
+                            onSetCountInBars = { bars -> viewModel.setPracticeCountInBars(bars) },
+                            onNudgeScroll = { pixels ->
+                                coroutineScope.launch {
+                                    val target = (scrollState.value + pixels).coerceIn(0f, scrollState.maxValue.toFloat())
+                                    scrollState.animateScrollTo(target.toInt())
+                                }
+                            },
+                            onScrollToTop = {
+                                coroutineScope.launch {
+                                    scrollState.animateScrollTo(0)
+                                }
+                            },
+                            onSaveBpmToSong = { viewModel.savePracticeBpmToSong() },
+                            onOpenTuner = {
+                                if (onNavigateTuner != null) onNavigateTuner() else showTunerDialog = true
+                            },
+                            onClose = { showPracticeSession = false },
+                            modifier = Modifier.padding(bottom = 10.dp)
+                        )
+                    }
+
                     // Optional Auto-Scroll Speed Popout
                     AnimatedVisibility(visible = showAutoScrollControls) {
                         Row(
@@ -960,6 +1358,28 @@ fun LyricsScreen(
                             }
                         }
 
+                        // Practice Session / Metronome toggle pill
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (practiceState.isPlaying) chosenChordColor else if (showPracticeSession) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .height(56.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                        ) {
+                            IconButton(
+                                onClick = { showPracticeSession = !showPracticeSession },
+                                modifier = Modifier
+                                    .padding(horizontal = 2.dp)
+                                    .testTag("practice_session_bottom_toggle_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.HourglassTop,
+                                    contentDescription = "Practice Metronome",
+                                    tint = if (practiceState.isPlaying) Color.Black else if (showPracticeSession) MaterialTheme.colorScheme.onSecondaryContainer else textColor
+                                )
+                            }
+                        }
+
                         // ▼ PAGE DOWN
                         Button(
                             onClick = {
@@ -1038,6 +1458,54 @@ fun LyricsScreen(
                 showTempoTimeDialog = false
             },
             onDismiss = { showTempoTimeDialog = false }
+        )
+    }
+
+    if (showTransliterationDialog) {
+        LyricsTransliterationDialog(
+            selectedTarget = transliterationTarget,
+            onSelectTarget = { target ->
+                viewModel.setTransliterationTarget(target)
+            },
+            onDismiss = { showTransliterationDialog = false }
+        )
+    }
+
+    if (showSongInfoDialog) {
+        val currentInfo = SongInfoData(
+            title = currentSong?.title ?: parsedSong?.title ?: "",
+            artist = currentSong?.artist ?: parsedSong?.artist ?: "",
+            album = currentSong?.album ?: parsedSong?.album ?: "",
+            key = currentSong?.originalKey ?: parsedSong?.key ?: "",
+            copyright = currentSong?.copyright ?: parsedSong?.copyright ?: "",
+            tempo = currentSong?.displayTempo ?: parsedSong?.tempo ?: "",
+            timeSignature = currentSong?.displayTimeSignature ?: parsedSong?.timeSignature ?: "",
+            capo = currentSong?.capo ?: parsedSong?.capo ?: 0
+        )
+        SongInfoDialog(
+            initialInfo = currentInfo,
+            langCode = langCode,
+            onConfirm = { updatedInfo ->
+                viewModel.updateSongMetadata(
+                    title = updatedInfo.title,
+                    artist = updatedInfo.artist,
+                    album = updatedInfo.album,
+                    key = updatedInfo.key,
+                    copyright = updatedInfo.copyright,
+                    tempo = updatedInfo.tempo,
+                    timeSignature = updatedInfo.timeSignature,
+                    capo = updatedInfo.capo
+                )
+                showSongInfoDialog = false
+            },
+            onDismiss = { showSongInfoDialog = false }
+        )
+    }
+
+    if (showTunerDialog) {
+        TunerDialog(
+            accidentalMode = accidentalMode,
+            onDismiss = { showTunerDialog = false }
         )
     }
 }

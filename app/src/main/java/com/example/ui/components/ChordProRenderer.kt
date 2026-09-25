@@ -32,6 +32,8 @@ import com.example.data.model.SectionType
 import com.example.data.model.SongSection
 import com.example.data.parser.AccidentalMode
 import com.example.data.parser.Transposer
+import com.example.util.transliteration.LyricsTransliterator
+import com.example.util.transliteration.TransliterationTarget
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -45,6 +47,8 @@ fun ChordProSongView(
     lyricsColor: Color,
     modifier: Modifier = Modifier,
     accidentalMode: AccidentalMode = AccidentalMode.SHARP,
+    showOnlyLyrics: Boolean = false,
+    transliterationTarget: TransliterationTarget = TransliterationTarget.ORIGINAL,
     onChordClick: ((String) -> Unit)? = null
 ) {
     Column(
@@ -55,8 +59,13 @@ fun ChordProSongView(
         parsedSong.sections.forEachIndexed { sIdx, section ->
             // Render section header if title is present
             if (section.title.isNotBlank()) {
+                val displaySectionTitle = if (transliterationTarget != TransliterationTarget.ORIGINAL) {
+                    LyricsTransliterator.transliterateLyric(section.title, transliterationTarget)
+                } else {
+                    section.title
+                }
                 SectionHeaderBadge(
-                    title = section.title,
+                    title = displaySectionTitle,
                     type = section.type,
                     modifier = Modifier.padding(top = if (sIdx > 0) (lineSpacing * 2.5f).dp else 8.dp, bottom = 8.dp)
                 )
@@ -68,51 +77,92 @@ fun ChordProSongView(
                         Spacer(modifier = Modifier.height((lyricsFontSize * 0.7f).dp))
                     }
                     LineType.COMMENT -> {
+                        val displayComment = if (transliterationTarget != TransliterationTarget.ORIGINAL) {
+                            LyricsTransliterator.transliterateLyric(line.text, transliterationTarget)
+                        } else {
+                            line.text
+                        }
                         CommentBadge(
-                            comment = line.text,
+                            comment = displayComment,
                             lyricsFontSize = lyricsFontSize,
                             lyricsColor = lyricsColor.copy(alpha = 0.8f),
                             modifier = Modifier.padding(vertical = (lineSpacing * 0.5f).dp)
                         )
                     }
                     LineType.SECTION_HEADER -> {
+                        val displayHeader = if (transliterationTarget != TransliterationTarget.ORIGINAL) {
+                            LyricsTransliterator.transliterateLyric(line.text, transliterationTarget)
+                        } else {
+                            line.text
+                        }
                         SectionHeaderBadge(
-                            title = line.text,
+                            title = displayHeader,
                             type = section.type,
                             modifier = Modifier.padding(top = (lineSpacing * 2f).dp, bottom = 8.dp)
                         )
                     }
                     LineType.CHORD_LYRIC -> {
-                        val hasChords = line.pairs.any { !it.chord.isNullOrBlank() }
-                        if (hasChords) {
-                            FlowRow(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = lineSpacing.dp)
-                            ) {
-                                line.pairs.forEach { pair ->
-                                    ChordLyricCell(
-                                        pair = pair,
-                                        transposeSemitones = transposeSemitones,
-                                        accidentalMode = accidentalMode,
-                                        chordFontSize = chordFontSize,
-                                        lyricsFontSize = lyricsFontSize,
-                                        chordColor = chordColor,
-                                        lyricsColor = lyricsColor,
-                                        onChordClick = onChordClick
-                                    )
-                                }
+                        if (showOnlyLyrics) {
+                            // "Show Only Lyrics" Mode: Chords hidden completely, fluid natural lyrics line
+                            val rawLyrics = line.pairs.joinToString("") { it.lyric }.ifBlank { line.text }
+                            val displayLyrics = if (transliterationTarget != TransliterationTarget.ORIGINAL) {
+                                LyricsTransliterator.transliterateLyric(rawLyrics, transliterationTarget)
+                            } else {
+                                rawLyrics
                             }
-                        } else {
-                            // Pure lyrics line without any chords
-                            val fullText = line.pairs.joinToString("") { it.lyric }.ifBlank { line.text }
                             Text(
-                                text = fullText,
+                                text = displayLyrics,
                                 fontSize = lyricsFontSize.sp,
                                 color = lyricsColor,
-                                lineHeight = (lyricsFontSize * 1.4f).sp,
-                                modifier = Modifier.padding(bottom = lineSpacing.dp)
+                                lineHeight = (lyricsFontSize * 1.55f).sp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = (lineSpacing * 1.3f).dp)
                             )
+                        } else {
+                            // Standard Chords & Lyrics Mode
+                            val hasChords = line.pairs.any { !it.chord.isNullOrBlank() }
+                            if (hasChords) {
+                                FlowRow(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = lineSpacing.dp)
+                                ) {
+                                    line.pairs.forEach { pair ->
+                                        // Transliterate ONLY the lyric part; musical chords remain strictly untouched
+                                        val displayLyric = if (transliterationTarget != TransliterationTarget.ORIGINAL) {
+                                            LyricsTransliterator.transliterateLyric(pair.lyric, transliterationTarget)
+                                        } else {
+                                            pair.lyric
+                                        }
+                                        ChordLyricCell(
+                                            pair = pair.copy(lyric = displayLyric),
+                                            transposeSemitones = transposeSemitones,
+                                            accidentalMode = accidentalMode,
+                                            chordFontSize = chordFontSize,
+                                            lyricsFontSize = lyricsFontSize,
+                                            chordColor = chordColor,
+                                            lyricsColor = lyricsColor,
+                                            onChordClick = onChordClick
+                                        )
+                                    }
+                                }
+                            } else {
+                                // Pure lyrics line without any chords
+                                val rawLyrics = line.pairs.joinToString("") { it.lyric }.ifBlank { line.text }
+                                val displayLyrics = if (transliterationTarget != TransliterationTarget.ORIGINAL) {
+                                    LyricsTransliterator.transliterateLyric(rawLyrics, transliterationTarget)
+                                } else {
+                                    rawLyrics
+                                }
+                                Text(
+                                    text = displayLyrics,
+                                    fontSize = lyricsFontSize.sp,
+                                    color = lyricsColor,
+                                    lineHeight = (lyricsFontSize * 1.4f).sp,
+                                    modifier = Modifier.padding(bottom = lineSpacing.dp)
+                                )
+                            }
                         }
                     }
                 }

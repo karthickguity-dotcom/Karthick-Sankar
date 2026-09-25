@@ -525,6 +525,22 @@ object AppStrings {
             SupportedLanguage.TELUGU to "అసలు",
             SupportedLanguage.MALAYALAM to "യഥാർത്ഥം",
             SupportedLanguage.KANNADA to "ಮೂಲ"
+        ),
+        "instrument_tuner" to mapOf(
+            SupportedLanguage.ENGLISH to "Instrument Tuner",
+            SupportedLanguage.TAMIL to "இசைக்கருவி ட்யூனர்",
+            SupportedLanguage.HINDI to "वाद्य ट्यूनर",
+            SupportedLanguage.TELUGU to "ఇన్స్ట్రుమెంట్ ట్యూనర్",
+            SupportedLanguage.MALAYALAM to "ഇൻസ്ട്രുമെന്റ് ട്യൂണർ",
+            SupportedLanguage.KANNADA to "ವಾದ್ಯ ಟ್ಯೂನರ್"
+        ),
+        "tuner_quick_desc" to mapOf(
+            SupportedLanguage.ENGLISH to "Guitar & Piano Tuner",
+            SupportedLanguage.TAMIL to "கிட்டார் & பியானோ ட்யூனர்",
+            SupportedLanguage.HINDI to "गिटार और पियानो ट्यूनर",
+            SupportedLanguage.TELUGU to "గిటార్ & పియానో ట్యూనర్",
+            SupportedLanguage.MALAYALAM to "ഗിറ്റാർ & പിയാനോ ട്യൂണർ",
+            SupportedLanguage.KANNADA to "ಗಿಟಾರ್ & ಪಿಯಾನೋ ಟ್ಯೂನರ್"
         )
     )
 }

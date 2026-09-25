@@ -18,7 +18,9 @@ object ChordProParser {
     fun parse(rawText: String, defaultTitle: String = "Untitled Song"): ParsedSong {
         var title = ""
         var artist = ""
+        var album = ""
         var key = ""
+        var copyright = ""
         var capo = 0
         var tempo = ""
         var timeSignature = ""
@@ -57,7 +59,9 @@ object ChordProParser {
                 when (tag) {
                     "title", "t" -> if (title.isBlank()) title = value
                     "artist", "a", "composer" -> if (artist.isBlank()) artist = value
+                    "album" -> if (album.isBlank()) album = value
                     "key", "k" -> if (key.isBlank()) key = value
+                    "copyright", "copy" -> if (copyright.isBlank()) copyright = value
                     "capo" -> capo = value.toIntOrNull() ?: 0
                     "tempo", "bpm" -> if (tempo.isBlank()) tempo = value
                     "time", "timesig", "time_sig", "signature", "meter" -> if (timeSignature.isBlank()) timeSignature = value
@@ -184,7 +188,9 @@ object ChordProParser {
         return ParsedSong(
             title = finalTitle,
             artist = artist,
+            album = album,
             key = detectedKey,
+            copyright = copyright,
             capo = capo,
             tempo = tempo,
             timeSignature = timeSignature,
